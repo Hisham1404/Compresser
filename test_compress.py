@@ -256,9 +256,28 @@ class TestStages(unittest.TestCase):
         self.assertLess(len(out), len(self.src))
 
     def test_rasterise_stage_actually_runs(self):
-        out = compress._rasterise(self.src, 72, 40, False)
+        out = compress._rasterise(self.src, 800, 40, False)
         self.assertIsNotNone(out, "rasterise stage returned nothing")
         self.assertLess(len(out), len(self.src))
+
+    def test_rasterise_sizes_pages_in_pixels_not_dpi(self):
+        """Pages with unequal page boxes must still land at equal resolution."""
+        doc = pymupdf.open()
+        buf = io.BytesIO()
+        noisy_image(1200, 1600, 4).save(buf, format="JPEG", quality=92)
+        for width, height in ((595, 842), (1700, 2400)):  # A4, then a huge box
+            page = doc.new_page(width=width, height=height)
+            page.insert_image(page.rect, stream=buf.getvalue())
+        raw = doc.tobytes()
+        doc.close()
+
+        out = compress._rasterise(raw, 900, 50, False)
+        with pymupdf.open(stream=out, filetype="pdf") as result:
+            sizes = [max(img[2], img[3])
+                     for page in result for img in page.get_images(full=True)]
+        self.assertEqual(len(sizes), 2)
+        self.assertTrue(all(abs(s - 900) <= 2 for s in sizes),
+                        f"pages rendered at unequal resolutions: {sizes}")
 
     def test_lossless_stage_keeps_pages(self):
         out = compress._lossless(self.src)

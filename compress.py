@@ -58,6 +58,18 @@ PDF_LADDER = (
     (66, 35), (60, 32), (54, 30), (50, 27), (46, 25), (42, 22),
     (38, 20), (34, 18), (30, 15), (26, 12), (22, 10),
 )
+# Rasterising ladder: (long edge in pixels, jpeg quality). Pages are sized in
+# pixels rather than by DPI because a page box says nothing reliable about how
+# big the page really is -- a scan wrapped at one pixel per point produces a
+# box several times larger than the A4 page beside it, and a uniform DPI would
+# hand that page most of the budget while starving the rest.
+RASTER_LADDER = (
+    (2600, 85), (2400, 82), (2200, 80), (2000, 76), (1900, 74), (1800, 72),
+    (1700, 70), (1600, 68), (1500, 64), (1400, 62), (1300, 60), (1200, 56),
+    (1100, 54), (1000, 50), (950, 48), (900, 45), (850, 42), (800, 40),
+    (750, 38), (700, 35), (650, 32), (600, 30), (550, 27), (500, 25),
+    (450, 22), (400, 20), (350, 18), (300, 15), (260, 12), (220, 10),
+)
 # Quality steps used when spending leftover budget at a fixed resolution.
 QUALITY_STEPS = (95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10)
 
@@ -231,23 +243,29 @@ def _rewrite_images(src: bytes, dpi: int, quality: int, gray: bool) -> bytes | N
     return out
 
 
-def _rasterise(src: bytes, dpi: int, quality: int, gray: bool,
+def _rasterise(src: bytes, long_edge: int, quality: int, gray: bool,
                pages: list[int] | None = None) -> bytes | None:
-    """Last resort: every page becomes one JPEG. Text stops being selectable."""
+    """Last resort: every page becomes one JPEG. Text stops being selectable.
+
+    Each page is rendered so its longer side is `long_edge` pixels, which keeps
+    every page at a comparable resolution however its page box is defined.
+    """
     doc = pymupdf.open(stream=src, filetype="pdf")
     out_doc = pymupdf.open()
     cs = pymupdf.csGRAY if gray else pymupdf.csRGB
     try:
         for number in (pages if pages is not None else range(doc.page_count)):
             page = doc[number]
-            pix = page.get_pixmap(dpi=dpi, colorspace=cs, annots=True)
-            jpeg = pix.tobytes("jpeg", jpg_quality=quality)
             rect = page.rect
+            zoom = long_edge / max(rect.width, rect.height, 1)
+            pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom),
+                                  colorspace=cs, annots=True)
+            jpeg = pix.tobytes("jpeg", jpg_quality=quality)
             new = out_doc.new_page(width=rect.width, height=rect.height)
             new.insert_image(new.rect, stream=jpeg)
         data = out_doc.tobytes(garbage=4, deflate=True, use_objstms=1)
     except Exception as exc:
-        _note_failure(f"rasterise {dpi}dpi q{quality}", exc)
+        _note_failure(f"rasterise {long_edge}px q{quality}", exc)
         data = None
     finally:
         out_doc.close()
@@ -269,24 +287,28 @@ def _has_text(src: bytes, sample: int = 8) -> bool:
     return False
 
 
-def _refine_quality(build, dpi: int, base_quality: int, budget: int):
-    """Spend whatever budget is left on quality, keeping the resolution."""
+def _refine_quality(build, size: int, base_quality: int, budget: int):
+    """Spend whatever budget is left on quality, keeping the resolution.
+
+    `size` is whichever resolution figure the ladder in use carries -- DPI when
+    re-encoding embedded images, pixels on the long edge when rasterising.
+    """
     steps = tuple(q for q in QUALITY_STEPS if q > base_quality)
     if not steps:
         return None
-    return ladder_search(lambda q: build(dpi, q), steps, budget)
+    return ladder_search(lambda q: build(size, q), steps, budget)
 
 
-def _best_fit(build, budget: int):
+def _best_fit(build, budget: int, ladder=PDF_LADDER):
     """Best ladder rung that fits, with leftover budget spent on quality."""
-    hit = ladder_search(lambda s: build(s[0], s[1]), PDF_LADDER, budget)
+    hit = ladder_search(lambda s: build(s[0], s[1]), ladder, budget)
     if hit is None:
         return None
-    (dpi, quality), data = hit
-    better = _refine_quality(build, dpi, quality, budget)
+    (size, quality), data = hit
+    better = _refine_quality(build, size, quality, budget)
     if better and len(better[1]) > len(data):
         quality, data = better
-    return (dpi, quality), data
+    return (size, quality), data
 
 
 def compress_pdf(path: Path, opt: "Options") -> "Result":
@@ -321,7 +343,7 @@ def compress_pdf(path: Path, opt: "Options") -> "Result":
         return Result(path, data, f"images re-encoded {dpi}dpi q{quality}")
 
     rasterised = _best_fit(
-        lambda dpi, q: _rasterise(working, dpi, q, opt.gray), budget
+        lambda px, q: _rasterise(working, px, q, opt.gray), budget, RASTER_LADDER
     )
     if rewritten and rasterised:
         # Neither keeps a text layer here, so prefer the one that uses more of
@@ -330,31 +352,31 @@ def compress_pdf(path: Path, opt: "Options") -> "Result":
             (dpi, quality), data = rewritten
             return Result(path, data, f"images re-encoded {dpi}dpi q{quality}")
     if rasterised:
-        (dpi, quality), data = rasterised
-        return Result(path, data, f"rasterised {dpi}dpi q{quality}")
+        (px, quality), data = rasterised
+        return Result(path, data, f"rasterised {px}px q{quality}")
     if rewritten:
         (dpi, quality), data = rewritten
         return Result(path, data, f"images re-encoded {dpi}dpi q{quality}")
 
     # The floor is still too big -- usually a long document.
-    dpi, quality = PDF_LADDER[-1]
-    note = f"rasterised {dpi}dpi q{quality} (floor)"
+    px, quality = RASTER_LADDER[-1]
+    note = f"rasterised {px}px q{quality} (floor)"
     if opt.split:
         parts = _split(working, opt)
         if len(parts) > 1:
             return Result(path, parts[0], f"split into {len(parts)} parts",
                           extra_parts=parts[1:],
                           over=any(len(p) > budget for p in parts))
-    floor = _rasterise(working, dpi, quality, opt.gray) or working
+    floor = _rasterise(working, px, quality, opt.gray) or working
     return Result(path, floor, note, over=len(floor) > budget)
 
 
 def _chunk_end(src: bytes, start: int, page_count: int, opt: "Options") -> int:
     """Largest page after `start` that still fits, measured at floor quality."""
-    dpi, quality = PDF_LADDER[-1]
+    px, quality = RASTER_LADDER[-1]
     end = page_count
     while end > start + 1:
-        data = _rasterise(src, dpi, quality, opt.gray, pages=list(range(start, end)))
+        data = _rasterise(src, px, quality, opt.gray, pages=list(range(start, end)))
         if data is not None and len(data) <= opt.target:
             return end
         end = start + max(1, (end - start) // 2)
@@ -377,13 +399,14 @@ def _split(src: bytes, opt: "Options") -> list[bytes]:
         end = _chunk_end(src, start, page_count, opt)
         pages = list(range(start, end))
         hit = _best_fit(
-            lambda dpi, q: _rasterise(src, dpi, q, opt.gray, pages), opt.target
+            lambda px, q: _rasterise(src, px, q, opt.gray, pages), opt.target,
+            RASTER_LADDER
         )
         if hit:
             parts.append(hit[1])
         else:  # single page that will not fit even at the floor
-            dpi, quality = PDF_LADDER[-1]
-            parts.append(_rasterise(src, dpi, quality, opt.gray, pages) or b"")
+            px, quality = RASTER_LADDER[-1]
+            parts.append(_rasterise(src, px, quality, opt.gray, pages) or b"")
         start = end
     return parts
 
