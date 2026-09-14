@@ -130,6 +130,11 @@ def _jpeg_to_pdf(jpeg: bytes, page_w: float, page_h: float) -> bytes:
 
 def compress_image(path: Path, opt: "Options") -> "Result":
     with Image.open(path) as raw:
+        source_format = raw.format
+        source_mode = raw.mode
+        # 274 is the EXIF orientation tag; anything but 1 needs the rotation
+        # baked in, which means re-encoding.
+        upright = (raw.getexif().get(274) or 1) == 1
         img = ImageOps.exif_transpose(raw)
         img = img.convert("L" if opt.gray else "RGB")
         orig_w, orig_h = img.width, img.height
@@ -142,6 +147,16 @@ def compress_image(path: Path, opt: "Options") -> "Result":
             box_w, box_h = (595.0, 842.0) if orig_h >= orig_w else (842.0, 595.0)
             ratio = min(box_w / page_w, box_h / page_h, 1.0)
             page_w, page_h = page_w * ratio, page_h * ratio
+
+        # A JPEG that already fits can be embedded byte for byte. Re-encoding
+        # it would add a second round of JPEG loss and usually make it larger,
+        # so this is better on both size and quality when it is available.
+        if (source_format == "JPEG" and upright and not opt.gray
+                and source_mode in ("RGB", "L")):
+            direct = _jpeg_to_pdf(path.read_bytes(), page_w, page_h)
+            if len(direct) <= opt.target:
+                return Result(path, direct,
+                              f"jpeg embedded unchanged ({orig_w}x{orig_h})")
 
         best = None  # (scale, quality, pdf_bytes)
         for scale in IMAGE_SCALES:

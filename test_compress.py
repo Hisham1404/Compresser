@@ -146,6 +146,35 @@ class TestImages(Base):
         self.assertEqual(len(self.outputs()), 4)
         self.assert_all_within()
 
+    def test_jpeg_that_fits_is_embedded_without_re_encoding(self):
+        """Re-encoding a JPEG that already fits only adds loss and bytes."""
+        import hashlib
+        src = self.dir / "small.jpg"
+        noisy_image(600, 400).save(src, quality=70)
+        self.assertLess(src.stat().st_size, TARGET, "fixture must fit the budget")
+        self.run_cli(str(src))
+        out = self.outputs()[0]
+        self.assertLess(out.stat().st_size, src.stat().st_size + 20 * 1024)
+        with pymupdf.open(out) as doc:
+            xref = doc[0].get_images(full=True)[0][0]
+            embedded = doc.extract_image(xref)["image"]
+        self.assertEqual(hashlib.md5(embedded).hexdigest(),
+                         hashlib.md5(src.read_bytes()).hexdigest(),
+                         "the JPEG was re-encoded instead of embedded as-is")
+
+    def test_rotated_jpeg_is_re_encoded_not_passed_through(self):
+        """EXIF rotation has to be baked in, so passthrough must be skipped."""
+        src = self.dir / "rot.jpg"
+        img = noisy_image(800, 600)
+        exif = img.getexif()
+        exif[274] = 6  # rotate 90 CW
+        img.save(src, quality=80, exif=exif)
+        self.run_cli(str(src))
+        with pymupdf.open(self.outputs()[0]) as doc:
+            rect = doc[0].rect
+        self.assertGreater(rect.height, rect.width,
+                           "rotation was not applied to the page")
+
     def test_tiny_image_is_not_inflated(self):
         Image.new("RGB", (48, 48), "teal").save(self.dir / "t.png")
         self.run_cli(str(self.dir / "t.png"))
