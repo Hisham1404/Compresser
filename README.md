@@ -10,6 +10,30 @@ scan.pdf       1.2 MB  ->  scan.pdf         147 KB
 invoice.png    340 KB  ->  invoice.pdf       92 KB
 ```
 
+## Quick start: the input/ and output/ folders
+
+The simplest way to use this. Drop your files into `input/`, run one command,
+collect the results from `output/`:
+
+```bash
+# 1. put your PDFs and images in input/  (sub-folders are fine)
+# 2. run:
+./run.sh
+# 3. the compressed PDFs are in output/, one per file, each under 150 KB
+```
+
+`run.sh` installs the dependencies on first run. Your originals in `input/`
+are never modified or deleted, and re-running overwrites the previous results
+rather than piling up copies.
+
+Flags pass straight through:
+
+```bash
+./run.sh --gray            # greyscale: much smaller for scans and text
+./run.sh --split           # cut documents too long to fit into parts
+./run.sh --target 100kb    # a different size limit
+```
+
 ## Install
 
 ```bash
@@ -18,7 +42,9 @@ pip install -r requirements.txt
 
 Pure Python wheels — no Ghostscript, ImageMagick or other system tools needed.
 
-## Use
+## Use directly
+
+For any folder, not just `input/`:
 
 ```bash
 # everything in a folder, into ./compressed/
