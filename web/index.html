@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Compresser — shrink PDFs and images to a size limit</title>
+<meta name="description" content="Compress PDFs and images to an exact size limit. Runs entirely in your browser — files never leave your device.">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗜️</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="head">
+    <h1>Compresser</h1>
+    <p class="tag">Shrink PDFs and images to a size limit — for upload forms that reject anything bigger.</p>
+    <p class="privacy"><span class="lock" aria-hidden="true">🔒</span> Everything runs inside your browser. Your files are never uploaded, stored, or sent anywhere.</p>
+  </header>
+
+  <!-- step 1 -->
+  <section class="card">
+    <h2><span class="num">1</span> Add files</h2>
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose files or drop them here">
+      <div class="drop-icon" aria-hidden="true">＋</div>
+      <div class="drop-main">Tap to choose files</div>
+      <div class="drop-sub">or drag them here · PDF, JPG, PNG, WebP, BMP, TIFF</div>
+    </div>
+    <input id="picker" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,.tif,.tiff,application/pdf,image/*" hidden>
+    <ul id="queue" class="queue" hidden></ul>
+  </section>
+
+  <!-- step 2 -->
+  <section class="card">
+    <h2><span class="num">2</span> Choose a size limit</h2>
+    <div id="presets" class="chips" role="group" aria-label="Size presets">
+      <button type="button" class="chip" data-kb="30">30 KB</button>
+      <button type="button" class="chip" data-kb="50">50 KB</button>
+      <button type="button" class="chip" data-kb="100">100 KB</button>
+      <button type="button" class="chip is-on" data-kb="150">150 KB</button>
+      <button type="button" class="chip" data-kb="300">300 KB</button>
+      <button type="button" class="chip" data-kb="500">500 KB</button>
+      <button type="button" class="chip" data-kb="1024">1 MB</button>
+    </div>
+    <label class="custom">
+      <span>Or type your own</span>
+      <span class="field">
+        <input id="size" type="number" inputmode="numeric" min="5" max="20000" step="1" value="150">
+        <span class="unit">KB</span>
+      </span>
+    </label>
+    <p id="budget-note" class="note"></p>
+
+    <details class="opts">
+      <summary>More options</summary>
+      <div class="opt-row">
+        <label class="opt">
+          <input type="radio" name="fmt" value="pdf" checked>
+          <span><strong>Always make a PDF</strong><em>Images are placed on a PDF page</em></span>
+        </label>
+        <label class="opt">
+          <input type="radio" name="fmt" value="same">
+          <span><strong>Keep the original type</strong><em>A JPG stays a JPG, a PDF stays a PDF</em></span>
+        </label>
+      </div>
+      <label class="opt opt-check">
+        <input id="gray" type="checkbox">
+        <span><strong>Convert to greyscale</strong><em>Much smaller for scans and text documents</em></span>
+      </label>
+    </details>
+  </section>
+
+  <!-- step 3 -->
+  <section class="card">
+    <h2><span class="num">3</span> Compress</h2>
+    <button id="go" class="go" disabled>Compress</button>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section id="results-card" class="card" hidden>
+    <div class="results-head">
+      <h2>Results</h2>
+      <div class="results-actions">
+        <button id="all" class="ghost" hidden>Download all</button>
+        <button id="clear" class="ghost">Clear</button>
+      </div>
+    </div>
+    <ul id="results" class="results"></ul>
+  </section>
+
+  <footer class="foot">
+    <p>Quality is pushed as high as the limit allows, rather than fixed in advance — the tool searches for the sharpest version that still fits.</p>
+    <p class="small">A PDF that is already under the limit is passed through untouched, and so is a JPG, so nothing is re-compressed needlessly. PDFs that must shrink are converted to page images, so selectable text becomes part of the picture.</p>
+  </footer>
+</div>
+
+<script src="vendor/pdf.min.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
