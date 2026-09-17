@@ -10,6 +10,22 @@ scan.pdf       1.2 MB  ->  scan.pdf         147 KB
 invoice.png    340 KB  ->  invoice.pdf       92 KB
 ```
 
+## The website
+
+A browser version lives in [`web/`](web/) and is deployed at:
+
+**https://compresser-hisham1404s-projects.vercel.app**
+
+Add files, pick a size limit, press Compress, download. It is mobile friendly,
+and compression happens entirely in the page — files are never uploaded, so
+nothing is stored on a server or in this repo and there is nothing to clean up
+afterwards.
+
+> The Vercel project is created with Deployment Protection on, so the link asks
+> for a Vercel login. To open it to everyone: Vercel dashboard → the
+> `compresser` project → Settings → Deployment Protection → turn off Vercel
+> Authentication.
+
 ## Quick start: the input/ and output/ folders
 
 The simplest way to use this. Drop your files into `input/`, run one command,
